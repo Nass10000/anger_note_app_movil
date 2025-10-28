@@ -9,6 +9,11 @@ export async function initDB(): Promise<void> {
       ts INTEGER NOT NULL,
       intensity INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts INTEGER NOT NULL,
+      note TEXT NOT NULL
+    );
   `);
 }
 
@@ -189,4 +194,63 @@ export async function last6MonthsAverages(): Promise<MonthAvg[]> {
   }
   
   return months;
+}
+
+// Función para obtener todos los registros
+export type Entry = {
+  id: number;
+  ts: number;
+  intensity: number;
+};
+
+export async function getAllEntries(): Promise<Entry[]> {
+  const result = await db.getAllAsync<Entry>(
+    'SELECT id, ts, intensity FROM entries ORDER BY ts DESC'
+  );
+  return result;
+}
+
+// Función para borrar un registro individual
+export async function deleteEntry(id: number): Promise<void> {
+  await db.runAsync('DELETE FROM entries WHERE id = ?', [id]);
+}
+
+// Función para borrar todos los registros
+export async function deleteAllEntries(): Promise<void> {
+  await db.runAsync('DELETE FROM entries');
+}
+
+// ============== ANGER NOTES ==============
+
+export type AngerNote = {
+  id: number;
+  ts: number;
+  note: string;
+};
+
+// Agregar una nota de enojo
+export async function addAngerNote(note: string): Promise<void> {
+  const ts = Date.now();
+  await db.runAsync(
+    'INSERT INTO notes (ts, note) VALUES (?, ?)',
+    [ts, note]
+  );
+}
+
+// Obtener todas las notas ordenadas por fecha (más recientes primero)
+export async function getAllAngerNotes(): Promise<AngerNote[]> {
+  const result = await db.getAllAsync<AngerNote>(
+    'SELECT id, ts, note FROM notes ORDER BY ts DESC'
+  );
+  return result;
+}
+
+// Borrar una nota individual
+export async function deleteAngerNote(id: number): Promise<void> {
+  await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
+}
+
+// Borrar todas las notas
+export async function deleteAllAngerNotes(): Promise<void> {
+  await db.runAsync('DELETE FROM notes');
 }

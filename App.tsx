@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, Alert, TextInput, Platform, StatusBar, ScrollView, StyleSheet } from 'react-native';
-import { initDB, addEntry, statsToday, last7DaysAverages, last30DaysAverage, last3MonthsAverages, last6MonthsAverages, lastYearAverages } from './src/db';
+import { View, Text, Button, Alert, TextInput, Platform, StatusBar, ScrollView, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { initDB, addEntry, statsToday, last7DaysAverages, last30DaysAverage, last3MonthsAverages, last6MonthsAverages, lastYearAverages, getAllEntries, deleteEntry, deleteAllEntries, Entry, addAngerNote, getAllAngerNotes, deleteAngerNote, deleteAllAngerNotes, AngerNote } from './src/db';
 import BarChart from './src/components/BarChart';
-// import AuthScreen from './src/components/AuthScreen'; // Deshabilitado temporalmente
+import AuthScreen from './src/components/AuthScreen';
 
 export default function App(){
-  // const [isAuthenticated, setIsAuthenticated] = useState(false); // Deshabilitado temporalmente
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [intensity, setIntensity] = useState('5');
   const [today, setToday] = useState<{count:number; avg:number}>({count:0, avg:0});
   const [week, setWeek] = useState<{label:string, avg:number}[]>([]);
@@ -13,6 +13,11 @@ export default function App(){
   const [m3, setM3] = useState<{label:string, avg:number}[]>([]);
   const [m6, setM6] = useState<{label:string, avg:number}[]>([]);
   const [y12, setY12] = useState<{label:string, avg:number}[]>([]);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [showEntries, setShowEntries] = useState(false);
+  const [angerNotes, setAngerNotes] = useState<AngerNote[]>([]);
+  const [showNotes, setShowNotes] = useState(false);
+  const [noteText, setNoteText] = useState('');
 
   async function refresh(){
     setToday(await statsToday());
@@ -21,13 +26,15 @@ export default function App(){
     setM3(await last3MonthsAverages());
     setM6(await last6MonthsAverages());
     setY12(await lastYearAverages());
+    setEntries(await getAllEntries());
+    setAngerNotes(await getAllAngerNotes());
   }
 
   useEffect(() => { 
-    // if (isAuthenticated) { // Deshabilitado temporalmente
+    if (isAuthenticated) {
       (async () => { await initDB(); await refresh(); })(); 
-    // }
-  }, []); // Cambiado de [isAuthenticated] a []
+    }
+  }, [isAuthenticated]);
 
   async function onSave(){
     const n = Math.max(1, Math.min(10, Number(intensity) || 5));
@@ -37,11 +44,126 @@ export default function App(){
     await refresh();
   }
 
+  async function onDeleteEntry(id: number, intensity: number, timestamp: number) {
+    const date = new Date(timestamp);
+    const dateStr = date.toLocaleDateString('es', { 
+      day: '2-digit', 
+      month: 'short', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    
+    Alert.alert(
+      'Borrar Registro',
+      `¿Estás seguro de borrar este registro?\n\nNivel: ${intensity}/10\nFecha: ${dateStr}`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Borrar', 
+          style: 'destructive',
+          onPress: async () => {
+            await deleteEntry(id);
+            Alert.alert('✓ Eliminado', 'El registro ha sido borrado');
+            await refresh();
+          }
+        }
+      ]
+    );
+  }
+
+  async function onDeleteAll() {
+    if (entries.length === 0) {
+      Alert.alert('Sin registros', 'No hay registros para borrar');
+      return;
+    }
+
+    Alert.alert(
+      '⚠️ Borrar Todo',
+      `¿Estás seguro de borrar TODOS los registros?\n\nSe borrarán ${entries.length} registros.\n\nEsta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Borrar Todo', 
+          style: 'destructive',
+          onPress: async () => {
+            await deleteAllEntries();
+            Alert.alert('✓ Borrado', 'Todos los registros han sido eliminados');
+            await refresh();
+          }
+        }
+      ]
+    );
+  }
+
+  async function onSaveNote() {
+    if (!noteText.trim()) {
+      Alert.alert('Nota vacía', 'Por favor escribe algo en la nota');
+      return;
+    }
+
+    await addAngerNote(noteText.trim());
+    Alert.alert('✓ Nota Guardada', 'Tu nota de enojo ha sido registrada');
+    setNoteText('');
+    await refresh();
+  }
+
+  async function onDeleteNote(id: number, note: string, timestamp: number) {
+    const date = new Date(timestamp);
+    const dateStr = date.toLocaleDateString('es', { 
+      day: '2-digit', 
+      month: 'short', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    
+    const preview = note.length > 50 ? note.substring(0, 50) + '...' : note;
+    
+    Alert.alert(
+      'Borrar Nota',
+      `¿Estás seguro de borrar esta nota?\n\n"${preview}"\n\nFecha: ${dateStr}`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Borrar', 
+          style: 'destructive',
+          onPress: async () => {
+            await deleteAngerNote(id);
+            Alert.alert('✓ Eliminada', 'La nota ha sido borrada');
+            await refresh();
+          }
+        }
+      ]
+    );
+  }
+
+  async function onDeleteAllNotes() {
+    if (angerNotes.length === 0) {
+      Alert.alert('Sin notas', 'No hay notas para borrar');
+      return;
+    }
+
+    Alert.alert(
+      '⚠️ Borrar Todas las Notas',
+      `¿Estás seguro de borrar TODAS las notas?\n\nSe borrarán ${angerNotes.length} notas.\n\nEsta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Borrar Todo', 
+          style: 'destructive',
+          onPress: async () => {
+            await deleteAllAngerNotes();
+            Alert.alert('✓ Borrado', 'Todas las notas han sido eliminadas');
+            await refresh();
+          }
+        }
+      ]
+    );
+  }
+
   // Si no está autenticado, mostrar pantalla de autenticación
-  // DESHABILITADO TEMPORALMENTE PARA QUE COMPILE
-  // if (!isAuthenticated) {
-  //   return <AuthScreen onAuthenticated={() => setIsAuthenticated(true)} />;
-  // }
+  if (!isAuthenticated) {
+    return <AuthScreen onAuthenticated={() => setIsAuthenticated(true)} />;
+  }
 
   return (
     <View style={styles.container}>
@@ -100,6 +222,148 @@ export default function App(){
 
         <View style={styles.statsCard}>
           <BarChart title='📆 Último año (promedio mensual)' data={y12.map((x: {label: string, avg: number}) => ({label: x.label, value: x.avg}))} />
+        </View>
+
+        <View style={styles.statsCard}>
+          <Text style={styles.sectionTitle}>📝 Anger Notes</Text>
+          <Text style={styles.inputHint}>Escribe sobre tu enojo y tus emociones</Text>
+          
+          <View style={styles.noteInputContainer}>
+            <TextInput
+              value={noteText}
+              onChangeText={setNoteText}
+              placeholder='Describe qué te hizo enojar, cómo te sientes...'
+              multiline
+              numberOfLines={6}
+              maxLength={undefined}
+              style={styles.noteInput}
+              textAlignVertical='top'
+            />
+            <TouchableOpacity 
+              style={styles.saveNoteButton}
+              onPress={onSaveNote}
+            >
+              <Text style={styles.saveNoteText}>💾 Guardar Nota</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.entryHeader}>
+            <Text style={styles.notesSubtitle}>Mis Notas de Enojo</Text>
+            <TouchableOpacity onPress={() => setShowNotes(!showNotes)}>
+              <Text style={styles.toggleButton}>{showNotes ? '▼ Ocultar' : '▶ Ver todas'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {showNotes && (
+            <>
+              <View style={styles.entryActions}>
+                <Text style={styles.entryCount}>Total: {angerNotes.length} notas</Text>
+                <TouchableOpacity 
+                  style={styles.deleteAllButton}
+                  onPress={onDeleteAllNotes}
+                >
+                  <Text style={styles.deleteAllText}>🗑️ Borrar Todas</Text>
+                </TouchableOpacity>
+              </View>
+
+              {angerNotes.length === 0 ? (
+                <Text style={styles.emptyText}>No hay notas aún. ¡Escribe tu primera nota!</Text>
+              ) : (
+                <View style={styles.notesList}>
+                  {angerNotes.map((note) => {
+                    const date = new Date(note.ts);
+                    const dateStr = date.toLocaleDateString('es', { 
+                      day: '2-digit', 
+                      month: 'short', 
+                      year: 'numeric' 
+                    });
+                    const timeStr = date.toLocaleTimeString('es', { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    });
+
+                    return (
+                      <View key={note.id} style={styles.noteItem}>
+                        <View style={styles.noteContent}>
+                          <View style={styles.noteHeader}>
+                            <Text style={styles.noteDateText}>📅 {dateStr}</Text>
+                            <Text style={styles.noteTimeText}>🕐 {timeStr}</Text>
+                          </View>
+                          <Text style={styles.noteText}>{note.note}</Text>
+                        </View>
+                        <TouchableOpacity 
+                          style={styles.deleteNoteButton}
+                          onPress={() => onDeleteNote(note.id, note.note, note.ts)}
+                        >
+                          <Text style={styles.deleteButtonText}>🗑️</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </>
+          )}
+        </View>
+
+        <View style={styles.statsCard}>
+          <View style={styles.entryHeader}>
+            <Text style={styles.sectionTitle}>📝 Gestión de Registros</Text>
+            <TouchableOpacity onPress={() => setShowEntries(!showEntries)}>
+              <Text style={styles.toggleButton}>{showEntries ? '▼ Ocultar' : '▶ Ver todos'}</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {showEntries && (
+            <>
+              <View style={styles.entryActions}>
+                <Text style={styles.entryCount}>Total: {entries.length} registros</Text>
+                <TouchableOpacity 
+                  style={styles.deleteAllButton}
+                  onPress={onDeleteAll}
+                >
+                  <Text style={styles.deleteAllText}>🗑️ Borrar Todo</Text>
+                </TouchableOpacity>
+              </View>
+
+              {entries.length === 0 ? (
+                <Text style={styles.emptyText}>No hay registros aún</Text>
+              ) : (
+                <View style={styles.entriesList}>
+                  {entries.map((entry) => {
+                    const date = new Date(entry.ts);
+                    const dateStr = date.toLocaleDateString('es', { 
+                      day: '2-digit', 
+                      month: 'short', 
+                      year: 'numeric' 
+                    });
+                    const timeStr = date.toLocaleTimeString('es', { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    });
+
+                    return (
+                      <View key={entry.id} style={styles.entryItem}>
+                        <View style={styles.entryInfo}>
+                          <Text style={styles.entryIntensity}>{entry.intensity}/10</Text>
+                          <View style={styles.entryDate}>
+                            <Text style={styles.entryDateText}>{dateStr}</Text>
+                            <Text style={styles.entryTimeText}>{timeStr}</Text>
+                          </View>
+                        </View>
+                        <TouchableOpacity 
+                          style={styles.deleteButton}
+                          onPress={() => onDeleteEntry(entry.id, entry.intensity, entry.ts)}
+                        >
+                          <Text style={styles.deleteButtonText}>🗑️</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </>
+          )}
         </View>
 
         <View style={{height: 20}} />
@@ -206,5 +470,178 @@ const styles = StyleSheet.create({
   statsBold: {
     fontWeight: '700',
     color: '#4c9',
+  },
+  entryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  toggleButton: {
+    fontSize: 14,
+    color: '#4c9',
+    fontWeight: '600',
+  },
+  entryActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  entryCount: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
+  },
+  deleteAllButton: {
+    backgroundColor: '#ff4444',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  deleteAllText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    paddingVertical: 20,
+    fontStyle: 'italic',
+  },
+  entriesList: {
+    marginTop: 8,
+  },
+  entryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4c9',
+  },
+  entryInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  entryIntensity: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#4c9',
+    width: 50,
+  },
+  entryDate: {
+    flex: 1,
+  },
+  entryDateText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
+  },
+  entryTimeText: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
+  },
+  deleteButton: {
+    padding: 8,
+    backgroundColor: '#fff',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#ff4444',
+  },
+  deleteButtonText: {
+    fontSize: 18,
+  },
+  noteInputContainer: {
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  noteInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 14,
+    backgroundColor: '#f9f9f9',
+    minHeight: 100,
+    marginBottom: 12,
+  },
+  saveNoteButton: {
+    backgroundColor: '#4c9',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  saveNoteText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  notesSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  notesList: {
+    marginTop: 8,
+  },
+  noteItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    backgroundColor: '#fffbf0',
+    borderRadius: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ff9800',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  noteContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+  noteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 12,
+  },
+  noteDateText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '600',
+  },
+  noteTimeText: {
+    fontSize: 12,
+    color: '#999',
+  },
+  noteText: {
+    fontSize: 14,
+    color: '#333',
+    lineHeight: 20,
+  },
+  deleteNoteButton: {
+    padding: 8,
+    backgroundColor: '#fff',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#ff4444',
+    alignSelf: 'flex-start',
   },
 });
